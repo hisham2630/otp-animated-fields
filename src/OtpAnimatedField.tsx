@@ -254,6 +254,7 @@ type RingsProps = {
   morph: SharedValue<number>;
   orbit: SharedValue<number>;
   success: SharedValue<number>;
+  origin: { x: number; y: number };
 };
 
 function OrbitDot({
@@ -282,7 +283,7 @@ function OrbitDot({
     let d = Math.abs(angle - sweep) % (Math.PI * 2);
     if (d > Math.PI) d = Math.PI * 2 - d;
     const head = 1 - d / Math.PI;
-    return { opacity: rings * (0.12 + 0.88 * head) };
+    return { opacity: rings * (0.55 + 0.45 * head) };
   });
 
   return (
@@ -296,18 +297,20 @@ function OrbitDot({
   );
 }
 
-function OrbitRings({ geometry, theme, morph, orbit, success }: RingsProps) {
-  const c = { x: geometry.width / 2, y: geometry.height / 2 };
+function OrbitRings({ geometry, theme, morph, orbit, success, origin }: RingsProps) {
+  const c = origin;
   const inner = innerRingRadius(geometry);
   const outer = outerRingRadius(geometry);
+  // Sit outside the square box corners so the ring is not covered.
+  const dotRadius = outer + geometry.boxSize * geometry.orbitBoxScale * 0.35;
   const dotCount = Math.min(48, Math.max(16, Math.round((2 * Math.PI * outer) / 7)));
   const dots = Array.from({ length: dotCount }, (_, i) => {
     const angle = (i / dotCount) * Math.PI * 2;
     return {
       i,
       angle,
-      x: c.x + Math.cos(angle) * outer - 1,
-      y: c.y + Math.sin(angle) * outer - 1,
+      x: c.x + Math.cos(angle) * dotRadius - 2.5,
+      y: c.y + Math.sin(angle) * dotRadius - 2.5,
     };
   });
 
@@ -492,63 +495,78 @@ function OtpAnimatedFieldInner(
   };
 
   const focusIndex = Math.min(field.digits.length, length - 1);
+  const ringPad = Math.ceil(geometry.boxSize * geometry.orbitBoxScale * 0.55 + 8);
 
   return (
     <View
       testID={testID}
-      style={[styles.root, { minHeight: geometry.height }, style]}
+      style={[styles.root, { minHeight: geometry.height + ringPad * 2 }, style]}
       onLayout={onLayout}
     >
       <View
         style={{
-          width: geometry.width,
-          height: geometry.height,
+          width: geometry.width + ringPad * 2,
+          height: geometry.height + ringPad * 2,
           direction: 'ltr',
         }}
       >
+        <View
+          style={{
+            position: 'absolute',
+            left: ringPad,
+            top: ringPad,
+            width: geometry.width,
+            height: geometry.height,
+          }}
+        >
+          {Array.from({ length }, (_, i) => (
+            <OtpBox
+              key={i}
+              index={i}
+              digit={field.digits[i] ?? ''}
+              geometry={geometry}
+              theme={theme}
+              status={field.status}
+              focusedSlot={field.focused && focusIndex === i}
+              morph={field.morph}
+              orbit={field.orbit}
+              shake={field.shake}
+              success={field.success}
+            />
+          ))}
+          <SuccessCheck
+            geometry={geometry}
+            theme={theme}
+            success={field.success}
+          />
+          <TextInput
+            value={field.digits}
+            onChangeText={field.onChangeText}
+            onFocus={() => field.setFocused(true)}
+            onBlur={() => field.setFocused(false)}
+            editable={field.inputEditable}
+            autoFocus={autoFocus}
+            caretHidden
+            contextMenuHidden={false}
+            keyboardType="number-pad"
+            textContentType="oneTimeCode"
+            autoComplete="sms-otp"
+            maxLength={length}
+            importantForAutofill="yes"
+            style={styles.hiddenInput}
+            accessibilityLabel="One-time code"
+          />
+        </View>
         <OrbitRings
           geometry={geometry}
           theme={theme}
           morph={field.morph}
           orbit={field.orbit}
           success={field.success}
-        />
-        {Array.from({ length }, (_, i) => (
-          <OtpBox
-            key={i}
-            index={i}
-            digit={field.digits[i] ?? ''}
-            geometry={geometry}
-            theme={theme}
-            status={field.status}
-            focusedSlot={field.focused && focusIndex === i}
-            morph={field.morph}
-            orbit={field.orbit}
-            shake={field.shake}
-            success={field.success}
-          />
-        ))}
-        <SuccessCheck
-          geometry={geometry}
-          theme={theme}
-          success={field.success}
-        />
-        <TextInput
-          value={field.digits}
-          onChangeText={field.onChangeText}
-          onFocus={() => field.setFocused(true)}
-          onBlur={() => field.setFocused(false)}
-          editable={field.inputEditable}
-          autoFocus={autoFocus}
-          caretHidden
-          contextMenuHidden={false}
-          keyboardType="number-pad"
-          textContentType="oneTimeCode"
-          autoComplete="sms-otp"
-          maxLength={length}
-          importantForAutofill="yes"
-          style={styles.hiddenInput}
-          accessibilityLabel="One-time code"
+          origin={{
+            x: ringPad + geometry.width / 2,
+            y: ringPad + geometry.height / 2,
+          }}
         />
       </View>
     </View>
@@ -598,9 +616,9 @@ const styles = StyleSheet.create({
   },
   dot: {
     position: 'absolute',
-    width: 2,
-    height: 2,
-    borderRadius: 1,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
   checkWrap: {
     position: 'absolute',
