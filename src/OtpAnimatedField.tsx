@@ -326,7 +326,13 @@ function OtpAnimatedFieldInner(
       style={[styles.root, { minHeight: geometry.height }, style]}
       onLayout={onLayout}
     >
-      <View style={{ width: '100%', height: geometry.height }}>
+      <View
+        style={{
+          width: geometry.width,
+          height: geometry.height,
+          direction: 'ltr',
+        }}
+      >
         <OrbitRings
           geometry={geometry}
           theme={theme}
@@ -381,6 +387,7 @@ const styles = StyleSheet.create({
   root: {
     width: '100%',
     alignItems: 'center',
+    direction: 'ltr',
   },
   box: {
     position: 'absolute',
