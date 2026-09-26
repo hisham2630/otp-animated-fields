@@ -10,6 +10,7 @@ export type OtpTheme = {
   gap: number;
   borderRadius: number;
   borderWidth: number;
+  glowBlur: number;
   orbitBoxScale: number;
   orbitRadius?: number;
   morphDurationMs: number;
@@ -28,10 +29,11 @@ const timings = {
   successDurationMs: 1000,
   minVerifyingMs: 1500,
   shakeAmplitude: 10,
-  boxSize: 56,
-  gap: 10,
-  borderRadius: 14,
+  boxSize: 58,
+  gap: 12,
+  borderRadius: 16,
   borderWidth: 1.5,
+  glowBlur: 18,
 } as const;
 
 export const otpThemeDark: OtpTheme = {

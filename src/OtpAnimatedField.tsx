@@ -15,7 +15,11 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Animated, {
+  cancelAnimation,
   useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
 import {
@@ -53,6 +57,36 @@ export type OtpAnimatedFieldProps = {
   onCodeChange?: (code: string) => void;
 };
 
+function withAlpha(color: string, alpha: number): string {
+  const hex = color.trim();
+  if (!hex.startsWith('#')) return color;
+  const h = hex.slice(1);
+  const full =
+    h.length === 3
+      ? h
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : h;
+  if (full.length !== 6) return color;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function clamp01(v: number): number {
+  'worklet';
+  return Math.min(1, Math.max(0, v));
+}
+
+function easeOutBack(t: number): number {
+  'worklet';
+  const c = 1.70158;
+  const x = t - 1;
+  return 1 + (c + 1) * x * x * x + c * x * x;
+}
+
 type BoxProps = {
   index: number;
   digit: string;
@@ -79,6 +113,34 @@ function OtpBox({
   success,
 }: BoxProps) {
   const half = geometry.boxSize / 2;
+  const showCursor = focusedSlot && !digit && status === 'idle';
+  const cursor = useSharedValue(1);
+  const pop = useSharedValue(digit ? 1 : 0.6);
+
+  useEffect(() => {
+    if (!showCursor) {
+      cancelAnimation(cursor);
+      cursor.value = 0;
+      return;
+    }
+    cursor.value = 1;
+    cursor.value = withRepeat(withTiming(0, { duration: 520 }), -1, true);
+    return () => cancelAnimation(cursor);
+  }, [cursor, showCursor]);
+
+  useEffect(() => {
+    if (!digit) {
+      pop.value = 0.6;
+      return;
+    }
+    pop.value = 0.6;
+    pop.value = withTiming(1, { duration: 180 });
+  }, [digit, pop]);
+
+  const cursorStyle = useAnimatedStyle(() => ({ opacity: cursor.value }));
+  const digitStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pop.value }],
+  }));
 
   const animatedStyle = useAnimatedStyle(() => {
     const t = travel(morph.value, index, geometry.length);
@@ -106,11 +168,19 @@ function OtpBox({
     };
   }, [geometry, half, index, theme.shakeAmplitude]);
 
+  const radius = theme.borderRadius * (geometry.fit || 1);
   let borderColor = theme.borderColor;
-  if (status === 'error') borderColor = theme.errorColor;
-  else if (status === 'verifying' || status === 'success')
+  let glow: string | undefined;
+  if (status === 'error') {
+    borderColor = theme.errorColor;
+    glow = withAlpha(theme.errorColor, 0.4);
+  } else if (status === 'verifying') {
     borderColor = theme.accentColor;
-  else if (focusedSlot || digit) borderColor = theme.accentColor;
+    glow = withAlpha(theme.accentColor, 0.25);
+  } else if (showCursor) {
+    borderColor = theme.accentColor;
+    glow = withAlpha(theme.accentColor, 0.45);
+  }
 
   return (
     <Animated.View
@@ -120,25 +190,60 @@ function OtpBox({
         {
           width: geometry.boxSize,
           height: geometry.boxSize,
-          borderRadius: theme.borderRadius * (geometry.fit || 1),
-          borderWidth: theme.borderWidth,
-          borderColor,
-          backgroundColor: theme.fillColor,
+          boxShadow: glow ? `0px 0px ${theme.glowBlur}px ${glow}` : undefined,
         },
         animatedStyle,
       ]}
     >
-      <Animated.Text
+      <View
         style={[
-          styles.digit,
+          styles.boxClip,
           {
-            color: theme.textColor,
-            fontSize: Math.max(16, geometry.boxSize * 0.42),
+            borderRadius: radius,
+            borderWidth: theme.borderWidth,
+            borderColor,
+            backgroundColor: theme.fillColor,
           },
         ]}
       >
-        {digit}
-      </Animated.Text>
+        {status === 'verifying' ? (
+          <View
+            style={[
+              styles.orbitWash,
+              {
+                borderTopRightRadius: radius,
+                backgroundColor: withAlpha(theme.accentColor, 0.55),
+              },
+            ]}
+          />
+        ) : null}
+        {digit ? (
+          <Animated.Text
+            style={[
+              styles.digit,
+              digitStyle,
+              {
+                color: theme.textColor,
+                fontSize: Math.max(16, 24 * (geometry.fit || 1)),
+              },
+            ]}
+          >
+            {digit}
+          </Animated.Text>
+        ) : null}
+        {showCursor ? (
+          <Animated.View
+            style={[
+              styles.cursor,
+              cursorStyle,
+              {
+                height: geometry.boxSize * 0.4,
+                backgroundColor: theme.textColor,
+              },
+            ]}
+          />
+        ) : null}
+      </View>
     </Animated.View>
   );
 }
@@ -147,26 +252,82 @@ type RingsProps = {
   geometry: OtpGeometry;
   theme: OtpTheme;
   morph: SharedValue<number>;
+  orbit: SharedValue<number>;
   success: SharedValue<number>;
 };
 
-function OrbitRings({ geometry, theme, morph, success }: RingsProps) {
-  const c = { x: geometry.width / 2, y: geometry.height / 2 };
-  const inner = innerRingRadius(geometry);
-  const outer = outerRingRadius(geometry);
-
+function OrbitDot({
+  angle,
+  x,
+  y,
+  accent,
+  morph,
+  orbit,
+  success,
+}: {
+  angle: number;
+  x: number;
+  y: number;
+  accent: string;
+  morph: SharedValue<number>;
+  orbit: SharedValue<number>;
+  success: SharedValue<number>;
+}) {
   const style = useAnimatedStyle(() => {
-    const t = morph.value;
-    const conv = convergence(success.value);
-    const opacity = Math.min(1, t * 1.2) * (1 - conv);
-    return { opacity };
+    const appear = clamp01((morph.value - 0.35) / 0.65);
+    const eased = 1 - Math.pow(1 - appear, 3);
+    const out = clamp01(success.value / 0.45);
+    const rings = eased * (1 - out);
+    const sweep = -orbit.value * Math.PI * 2;
+    let d = Math.abs(angle - sweep) % (Math.PI * 2);
+    if (d > Math.PI) d = Math.PI * 2 - d;
+    const head = 1 - d / Math.PI;
+    return { opacity: rings * (0.12 + 0.88 * head) };
   });
 
   return (
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
-      <View
+    <Animated.View
+      style={[
+        styles.dot,
+        style,
+        { left: x, top: y, backgroundColor: accent },
+      ]}
+    />
+  );
+}
+
+function OrbitRings({ geometry, theme, morph, orbit, success }: RingsProps) {
+  const c = { x: geometry.width / 2, y: geometry.height / 2 };
+  const inner = innerRingRadius(geometry);
+  const outer = outerRingRadius(geometry);
+  const dotCount = Math.min(48, Math.max(16, Math.round((2 * Math.PI * outer) / 7)));
+  const dots = Array.from({ length: dotCount }, (_, i) => {
+    const angle = (i / dotCount) * Math.PI * 2;
+    return {
+      i,
+      angle,
+      x: c.x + Math.cos(angle) * outer - 1,
+      y: c.y + Math.sin(angle) * outer - 1,
+    };
+  });
+
+  const innerStyle = useAnimatedStyle(() => {
+    const appear = clamp01((morph.value - 0.35) / 0.65);
+    const eased = 1 - Math.pow(1 - appear, 3);
+    const out = clamp01(success.value / 0.45);
+    const rings = eased * (1 - out);
+    return {
+      opacity: rings,
+      transform: [{ scale: 0.6 + 0.4 * rings }],
+    };
+  });
+
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Animated.View
         style={[
           styles.ring,
+          innerStyle,
           {
             width: inner * 2,
             height: inner * 2,
@@ -177,20 +338,19 @@ function OrbitRings({ geometry, theme, morph, success }: RingsProps) {
           },
         ]}
       />
-      <View
-        style={[
-          styles.ring,
-          {
-            width: outer * 2,
-            height: outer * 2,
-            borderRadius: outer,
-            borderColor: theme.ringColor,
-            left: c.x - outer,
-            top: c.y - outer,
-          },
-        ]}
-      />
-    </Animated.View>
+      {dots.map((dot) => (
+        <OrbitDot
+          key={dot.i}
+          angle={dot.angle}
+          x={dot.x}
+          y={dot.y}
+          accent={theme.accentColor}
+          morph={morph}
+          orbit={orbit}
+          success={success}
+        />
+      ))}
+    </View>
   );
 }
 
@@ -201,16 +361,23 @@ type CheckProps = {
 };
 
 function SuccessCheck({ geometry, theme, success }: CheckProps) {
+  const inner = innerRingRadius(geometry);
+  const radius = inner * 0.7;
+  const size = radius * 2;
+  const c = { x: geometry.width / 2, y: geometry.height / 2 };
+
   const style = useAnimatedStyle(() => {
-    const conv = convergence(success.value);
+    const t = success.value;
+    const pop = easeOutBack(clamp01((t - 0.3) / 0.45));
     return {
-      opacity: conv,
-      transform: [{ scale: 0.4 + 0.6 * conv }],
+      opacity: t > 0.05 ? 1 : 0,
+      transform: [{ scale: Math.max(0.01, pop) }],
     };
   });
 
-  const size = Math.min(geometry.boxSize * 1.1, 48);
-  const c = { x: geometry.width / 2, y: geometry.height / 2 };
+  const draw = useAnimatedStyle(() => ({
+    opacity: clamp01((success.value - 0.55) / 0.45),
+  }));
 
   return (
     <Animated.View
@@ -220,24 +387,30 @@ function SuccessCheck({ geometry, theme, success }: CheckProps) {
         {
           width: size,
           height: size,
-          left: c.x - size / 2,
-          top: c.y - size / 2,
+          left: c.x - radius,
+          top: c.y - radius,
+          borderRadius: radius,
+          borderWidth: 2,
+          borderColor: theme.successColor,
+          backgroundColor: withAlpha(theme.successColor, 0.16),
         },
         style,
       ]}
     >
-      <View
-        style={[
-          styles.checkShort,
-          { backgroundColor: theme.successColor, borderRadius: 2 },
-        ]}
-      />
-      <View
-        style={[
-          styles.checkLong,
-          { backgroundColor: theme.successColor, borderRadius: 2 },
-        ]}
-      />
+      <Animated.View style={[styles.checkMark, draw]}>
+        <View
+          style={[
+            styles.checkShort,
+            { backgroundColor: theme.successColor, borderRadius: 2 },
+          ]}
+        />
+        <View
+          style={[
+            styles.checkLong,
+            { backgroundColor: theme.successColor, borderRadius: 2 },
+          ]}
+        />
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -337,6 +510,7 @@ function OtpAnimatedFieldInner(
           geometry={geometry}
           theme={theme}
           morph={field.morph}
+          orbit={field.orbit}
           success={field.success}
         />
         {Array.from({ length }, (_, i) => (
@@ -393,20 +567,48 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: 0,
+  },
+  boxClip: {
+    flex: 1,
+    alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  orbitWash: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: '72%',
+    height: '72%',
   },
   digit: {
     fontWeight: '600',
     textAlign: 'center',
   },
+  cursor: {
+    position: 'absolute',
+    width: 2,
+    borderRadius: 1,
+  },
   ring: {
     position: 'absolute',
-    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderWidth: 1,
     backgroundColor: 'transparent',
+  },
+  dot: {
+    position: 'absolute',
+    width: 2,
+    height: 2,
+    borderRadius: 1,
   },
   checkWrap: {
     position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkMark: {
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },
