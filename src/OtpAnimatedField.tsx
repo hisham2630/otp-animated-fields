@@ -50,6 +50,7 @@ export type OtpAnimatedFieldProps = {
   onVerified?: (code: string) => void;
   onFailed?: () => void;
   onStatusChanged?: (status: OtpStatus) => void;
+  onCodeChange?: (code: string) => void;
 };
 
 type BoxProps = {
@@ -257,6 +258,7 @@ function OtpAnimatedFieldInner(
     onVerified,
     onFailed,
     onStatusChanged,
+    onCodeChange,
   } = props;
 
   const theme = useMemo(
@@ -292,6 +294,7 @@ function OtpAnimatedFieldInner(
     onVerified,
     onFailed,
     onStatusChanged,
+    onCodeChange,
     ref,
   });
 

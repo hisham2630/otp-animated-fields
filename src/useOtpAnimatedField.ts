@@ -35,6 +35,7 @@ export type UseOtpAnimatedFieldArgs = {
   onVerified?: (code: string) => void;
   onFailed?: () => void;
   onStatusChanged?: (status: OtpStatus) => void;
+  onCodeChange?: (code: string) => void;
   ref?: Ref<OtpAnimatedFieldRef>;
 };
 
@@ -92,6 +93,7 @@ export function useOtpAnimatedField(
     onVerified,
     onFailed,
     onStatusChanged,
+    onCodeChange,
     ref,
   } = args;
 
@@ -114,6 +116,7 @@ export function useOtpAnimatedField(
   const onVerifiedRef = useRef(onVerified);
   const onFailedRef = useRef(onFailed);
   const onStatusRef = useRef(onStatusChanged);
+  const onCodeChangeRef = useRef(onCodeChange);
   const themeRef = useRef(theme);
   const reducedRef = useRef(reducedMotion);
   const hapticRef = useRef(hapticFeedback);
@@ -124,6 +127,7 @@ export function useOtpAnimatedField(
   onVerifiedRef.current = onVerified;
   onFailedRef.current = onFailed;
   onStatusRef.current = onStatusChanged;
+  onCodeChangeRef.current = onCodeChange;
   themeRef.current = theme;
   reducedRef.current = reducedMotion;
   hapticRef.current = hapticFeedback;
@@ -178,8 +182,11 @@ export function useOtpAnimatedField(
       await animateTo(shake, 1, t.errorDurationMs, reduced);
       if (seq !== seqRef.current) return;
 
-      if (clearText) setDigits('');
-      digitsRef.current = clearText ? '' : digitsRef.current;
+      if (clearText) {
+        setDigits('');
+        digitsRef.current = '';
+        onCodeChangeRef.current?.('');
+      }
       resetVisuals();
       bumpStatus('idle');
       if (clearText) onFailedRef.current?.();
@@ -251,6 +258,7 @@ export function useOtpAnimatedField(
       const next = text.replace(/\D/g, '').slice(0, length);
       setDigits(next);
       digitsRef.current = next;
+      onCodeChangeRef.current?.(next);
       if (next.length === length) {
         void runVerify(next);
       }
@@ -263,6 +271,7 @@ export function useOtpAnimatedField(
     verifyingRef.current = false;
     setDigits('');
     digitsRef.current = '';
+    onCodeChangeRef.current?.('');
     resetVisuals();
     bumpStatus('idle');
   }, [bumpStatus, resetVisuals]);
