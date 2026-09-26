@@ -1,0 +1,43 @@
+{
+  "name": "otp-animated-fields",
+  "version": "1.0.0",
+  "description": "Animated OTP input for React Native — boxes orbit while verification runs",
+  "license": "MIT",
+  "author": "hisham2630",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hisham2630/otp-animated-fields.git"
+  },
+  "main": "src/index.ts",
+  "react-native": "src/index.ts",
+  "types": "src/index.ts",
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "tsx src/geometry.selfcheck.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*",
+    "react-native-reanimated": ">=3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-reanimated": "4.5.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  },
+  "keywords": [
+    "react-native",
+    "otp",
+    "pin",
+    "reanimated",
+    "animation"
+  ]
+}
